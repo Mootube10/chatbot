@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Engineering & Specialist Team Console</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; }
+    header { background: #1e293b; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
+    header h1 { font-size: 1.1rem; margin: 0; color: #38bdf8; }
+    nav a { color: #cbd5e1; text-decoration: none; margin-left: 16px; font-size: 0.9rem; padding: 6px 12px; border-radius: 6px; background: #334155; }
+    .container { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+    .case-card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 18px; margin-bottom: 18px; }
+    .meta { font-size: 0.85rem; color: #94a3b8; margin: 6px 0 12px; }
+    .tag { display: inline-block; padding: 3px 9px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; }
+    .tag.tech { background: #7c3aed; color: white; }
+    .tag.gen { background: #059669; color: white; }
+    .msg-list { background: #0f172a; padding: 12px; border-radius: 8px; display: flex; flex-direction: column; gap: 8px; }
+    .msg-item { font-size: 0.9rem; border-bottom: 1px solid #1e293b; padding-bottom: 6px; }
+    .reply-bar { display: flex; gap: 10px; margin-top: 12px; }
+    input { flex: 1; padding: 10px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: white; }
+    button { padding: 10px 16px; border-radius: 6px; border: none; background: #38bdf8; color: #0f172a; font-weight: 700; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Engineering & Specialist Console (Zero CS Middlemen)</h1>
+    <nav>
+      <a href="/">AI Chatbot</a>
+      <a href="/portal">User Portal</a>
+    </nav>
+  </header>
+
+  <div class="container" id="cases-list">Loading cases...</div>
+
+  <script>
+    async function loadCases() {
+      const res = await fetch("/api/cases");
+      const cases = await res.json();
+      const container = document.getElementById("cases-list");
+
+      if (!cases.length) {
+        container.innerHTML = "<p>No cases yet. Use the AI Chatbot to create an account and submit a case.</p>";
+        return;
+      }
+
+      container.innerHTML = cases.map(c => {
+        const isTech = c.case_type === "TECHNICAL";
+        const zdLink = c.external_ticket_url ? ` &bull; <a href="${c.external_ticket_url}" target="_blank" style="color:#38bdf8;">Zendesk Ticket #${c.external_ticket_id}</a>` : "";
+        const msgs = c.messages.map(m => `
+          <div class="msg-item"><strong>${m.sender_name} (${m.sender_role}):</strong> ${m.message}</div>
+        `).join("");
+
+        return `
+          <div class="case-card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <h3 style="margin:0;">${c.id} &mdash; ${c.subject}</h3>
+              <span class="tag ${isTech ? 'tech' : 'gen'}">${c.case_type} &bull; ${c.assigned_team}</span>
+            </div>
+            <div class="meta">
+              User Account: <strong>${c.user_id}</strong> (${c.full_name} &lt;${c.email}&gt; &bull; ${c.company}) &bull; Status: <strong>${c.status}</strong>${zdLink}
+            </div>
+            <div class="msg-list">${msgs}</div>
+            ${isTech ? `
+              <div class="reply-bar">
+                <input type="text" id="eng-reply-${c.id}" placeholder="Write technical response directly to user's account portal..." />
+                <button onclick="sendEngineerReply('${c.id}')">Reply as Engineer</button>
+              </div>
+            ` : `<p style="font-size:0.85rem; color:#6ee7b7; margin-top:10px;">Handled via direct Zendesk Customer Service Advisor handoff.</p>`}
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function sendEngineerReply(caseId) {
+      const input = document.getElementById(`eng-reply-${caseId}`);
+      const message = input.value.trim();
+      if (!message) return;
+      await fetch(`/api/cases/${caseId}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sender_role: "engineer", sender_name: "Lead Systems Engineer", message })
+      });
+      loadCases();
+    }
+
+    loadCases();
+  </script>
+</body>
+</html>

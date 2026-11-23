@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>User Account & Attached Cases Portal</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 0; }
+    header { background: #1e293b; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
+    header h1 { font-size: 1.1rem; margin: 0; color: #38bdf8; }
+    nav a { color: #cbd5e1; text-decoration: none; margin-left: 16px; font-size: 0.9rem; padding: 6px 12px; border-radius: 6px; background: #334155; }
+    .container { max-width: 860px; margin: 28px auto; padding: 0 16px; }
+    .lookup-box { background: #1e293b; padding: 20px; border-radius: 10px; display: flex; gap: 10px; border: 1px solid #334155; }
+    input { flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: white; }
+    button { padding: 10px 18px; border-radius: 8px; border: none; background: #38bdf8; color: #0f172a; font-weight: 700; cursor: pointer; }
+    .account-banner { background: #1e293b; border-left: 4px solid #22c55e; padding: 16px; border-radius: 8px; margin-top: 20px; }
+    .case-card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 18px; margin-top: 18px; }
+    .badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: #0284c7; color: white; }
+    .thread { margin-top: 14px; border-top: 1px solid #334155; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .note { background: #0f172a; padding: 10px 12px; border-radius: 6px; font-size: 0.9rem; }
+    .note.engineer { border-left: 3px solid #38bdf8; }
+    .reply-row { display: flex; gap: 8px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>User Account & Technical Case Portal</h1>
+    <nav>
+      <a href="/">AI Chatbot</a>
+      <a href="/dashboard">Engineering Console</a>
+    </nav>
+  </header>
+
+  <div class="container">
+    <div class="lookup-box">
+      <input type="email" id="email-input" placeholder="Enter your account email address..." />
+      <button onclick="loadPortal()">Load My Account & Cases</button>
+    </div>
+    <div id="content"></div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("email")) {
+      document.getElementById("email-input").value = params.get("email");
+      loadPortal();
+    }
+
+    async function loadPortal() {
+      const email = document.getElementById("email-input").value.trim();
+      if (!email) return;
+      const content = document.getElementById("content");
+      content.innerHTML = "<p>Loading account...</p>";
+
+      const res = await fetch(`/api/portal/${encodeURIComponent(email)}`);
+      if (!res.ok) {
+        content.innerHTML = "<p style='color:#f87171;'>Account not found. Start a chat with the AI Chatbot first to provision your account.</p>";
+        return;
+      }
+      const data = await res.json();
+      let html = `
+        <div class="account-banner">
+          <strong>Account ID:</strong> ${data.account.id} &bull;
+          <strong>Name:</strong> ${data.account.full_name} &bull;
+          <strong>Company:</strong> ${data.account.company}
+        </div>
+      `;
+
+      data.cases.forEach(c => {
+        const msgsHtml = c.messages.map(m => `
+          <div class="note ${m.sender_role}">
+            <strong>${m.sender_name} (${m.sender_role}):</strong> ${m.message}
+          </div>
+        `).join("");
+
+        html += `
+          <div class="case-card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <h3 style="margin:0;">${c.id}: ${c.subject}</h3>
+              <span class="badge">${c.assigned_team} &bull; ${c.status}</span>
+            </div>
+            <p style="color:#94a3b8; font-size:0.9rem;">${c.summary}</p>
+            <div class="thread">${msgsHtml}</div>
+            <div class="reply-row">
+              <input type="text" id="reply-${c.id}" placeholder="Reply directly to ${c.assigned_team}..." />
+              <button onclick="sendReply('${c.id}', '${data.account.full_name}')">Send Reply</button>
+            </div>
+          </div>
+        `;
+      });
+      content.innerHTML = html;
+    }
+
+    async function sendReply(caseId, customerName) {
+      const box = document.getElementById(`reply-${caseId}`);
+      const msg = box.value.trim();
+      if (!msg) return;
+      await fetch(`/api/cases/${caseId}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sender_role: "customer", sender_name: customerName, message: msg })
+      });
+      loadPortal();
+    }
+  </script>
+</body>
+</html>

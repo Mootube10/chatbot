@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Autonomous AI Case Triage Chatbot</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+    header { background: #1e293b; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
+    header h1 { font-size: 1.1rem; margin: 0; color: #38bdf8; }
+    nav a { color: #cbd5e1; text-decoration: none; margin-left: 18px; font-size: 0.9rem; padding: 6px 12px; border-radius: 6px; background: #334155; }
+    nav a:hover { background: #475569; color: #fff; }
+    #chat-container { flex: 1; max-width: 780px; width: 100%; margin: 20px auto; background: #1e293b; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #334155; }
+    #messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+    .msg { max-width: 80%; padding: 12px 16px; border-radius: 12px; line-height: 1.45; font-size: 0.95rem; }
+    .user { align-self: flex-end; background: #2563eb; color: white; border-bottom-right-radius: 2px; }
+    .bot { align-self: flex-start; background: #334155; color: #f1f5f9; border-bottom-left-radius: 2px; }
+    .action-card { background: #0f172a; border: 1px solid #38bdf8; border-radius: 8px; padding: 12px; margin-top: 10px; font-size: 0.88rem; }
+    .action-card a { display: inline-block; margin-top: 8px; background: #38bdf8; color: #0f172a; font-weight: 600; padding: 7px 14px; border-radius: 6px; text-decoration: none; }
+    #input-bar { display: flex; padding: 14px; background: #0f172a; border-top: 1px solid #334155; gap: 10px; }
+    input { flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #475569; background: #1e293b; color: white; font-size: 0.95rem; }
+    button { padding: 12px 20px; border-radius: 8px; border: none; background: #38bdf8; color: #0f172a; font-weight: 700; cursor: pointer; }
+    button:disabled { opacity: 0.5; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AI Autonomous Case & Account Engine</h1>
+    <nav>
+      <a href="/portal">User Account Portal</a>
+      <a href="/dashboard">Engineering Console</a>
+    </nav>
+  </header>
+
+  <div id="chat-container">
+    <div id="messages">
+      <div class="msg bot">
+        Hi! I am your autonomous support assistant. Tell me your <strong>Full Name</strong>, <strong>Email</strong>, and what you need help with. I will automatically create your account, attach your case, and route you directly to an Engineer or a Zendesk Advisor.
+      </div>
+    </div>
+    <form id="input-bar">
+      <input type="text" id="user-input" placeholder="e.g. I'm Alex (alex@acme.com) and our webhook API is throwing a 500 error..." required />
+      <button type="submit" id="send-btn">Send</button>
+    </form>
+  </div>
+
+  <script>
+    const sessionId = "sess-" + Math.random().toString(36).substring(2, 10);
+    const history = [];
+    const messagesDiv = document.getElementById("messages");
+    const form = document.getElementById("input-bar");
+    const input = document.getElementById("user-input");
+    const sendBtn = document.getElementById("send-btn");
+
+    function appendMessage(text, sender, extraHtml = "") {
+      const div = document.createElement("div");
+      div.className = `msg ${sender}`;
+      div.innerHTML = text + extraHtml;
+      messagesDiv.appendChild(div);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+
+      appendMessage(text, "user");
+      input.value = "";
+      sendBtn.disabled = true;
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId, message: text, history })
+        });
+        const data = await res.json();
+        history.push({ role: "user", content: text });
+        history.push({ role: "assistant", content: data.reply });
+
+        let cardHtml = "";
+        if (data.status === "executed") {
+          if (data.case_type === "TECHNICAL") {
+            cardHtml = `
+              <div class="action-card">
+                <strong>Account Provisioned:</strong> ${data.account_id}<br/>
+                <strong>Case Attached:</strong> ${data.case_id} &rarr; <em>${data.assigned_team}</em> (Bypassed Customer Service)<br/>
+                <a href="${data.portal_url}">Open Your Account Case Portal</a>
+              </div>`;
+          } else {
+            cardHtml = `
+              <div class="action-card">
+                <strong>Pre-Triaged Zendesk Ticket:</strong> ${data.zendesk_ticket_id}<br/>
+                <strong>Account Linked:</strong> ${data.account_id}<br/>
+                All details have been sent ahead so you skip queues and speak straight to a Customer Service Advisor.<br/>
+                <a href="${data.zendesk_handoff_url}" target="_blank">Continue Directly to Zendesk Advisor &rarr;</a>
+              </div>`;
+          }
+        }
+        appendMessage(data.reply, "bot", cardHtml);
+      } catch (err) {
+        appendMessage("Error connecting to server. Please check backend logs.", "bot");
+      } finally {
+        sendBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
